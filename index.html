@@ -6,20 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#317EFB">
-  <!-- Supabase client library -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-  <script>
-    // Register the service worker if available
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('service-worker.js')
-        .then(registration => {
-          console.log('Service Worker registered with scope:', registration.scope);
-        })
-        .catch(error => {
-          console.log('Service Worker registration failed:', error);
-        });
-    }
-  </script>
+  <link rel="icon" type="image/png" href="icons/icon-192x192.png">
+  
   <style>
     table {
       border-collapse: collapse;
@@ -46,16 +34,9 @@
   </style>
 </head>
 <body>
-  <!-- Display current time above the version -->
+  <p id="version">Version 0.7</p>
   <h1 id="currentTime"></h1>
-  <p id="version">Version 0.1</p> <!-- Version label below the time -->
-
-  <p>
-    This HelloPWA displays the current time and a table of location data retrieved from and stored in Supabase.
-    New rows (with 6 columns) are added at the start of each minute using the device's location.
-  </p>
-
-  <!-- Table with 6 columns: Location ID, User ID, Timestamp, Longitude, Latitude, Elevation -->
+  
   <table>
     <thead>
       <tr>
@@ -71,153 +52,40 @@
       <!-- Rows will be dynamically inserted here -->
     </tbody>
   </table>
-
+  
+  <!-- IMPORTANT: Load Supabase using their recommended UMD build -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  
+  <!-- Only load app.js AFTER Supabase is loaded -->
+  <script src="app.js"></script>
+  
   <script>
-    // Initialize Supabase client (replace with your actual credentials)
-    const supabaseUrl = 'https://bguwiprkgcxrqauztmvd.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJndXdpcHJrZ2N4cnFhdXp0bXZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA3ODAxOTksImV4cCI6MjA1NjM1NjE5OX0.ATbtMPiPt8VvtyVBu-gpmDo8Mo1eWy1aFXKfb6m1QsE';
-    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
-
-    // Dummy user id; if using Supabase Auth, retrieve the authenticated user's id.
-    const userId = "anonymous";
-
-    // Local counter for new rows when no DB id is provided.
-    let rowCounter = 1;
-
-    // Update the current time every second.
     function updateCurrentTime() {
       const now = new Date();
-      document.getElementById('currentTime').textContent = now.toLocaleString();
-    }
-    updateCurrentTime();
-    setInterval(updateCurrentTime, 1000);
-
-    // Append a row to the table with six columns.
-    function appendRow(latitude, longitude, altitude, timestamp, userid, locationid) {
-      const tbody = document.querySelector('table tbody');
-      const tr = document.createElement('tr');
-
-      const cellLocationId = document.createElement('td');
-      cellLocationId.textContent = locationid || rowCounter;
-
-      const cellUserId = document.createElement('td');
-      cellUserId.textContent = userid || userId;
-
-      const cellTimestamp = document.createElement('td');
-      cellTimestamp.textContent = timestamp;
-
-      const cellLongitude = document.createElement('td');
-      cellLongitude.textContent = longitude;
-
-      const cellLatitude = document.createElement('td');
-      cellLatitude.textContent = latitude;
-
-      const cellElevation = document.createElement('td');
-      cellElevation.textContent = (altitude !== null && altitude !== undefined) ? altitude + " m" : "N/A";
-
-      tr.appendChild(cellLocationId);
-      tr.appendChild(cellUserId);
-      tr.appendChild(cellTimestamp);
-      tr.appendChild(cellLongitude);
-      tr.appendChild(cellLatitude);
-      tr.appendChild(cellElevation);
-      tbody.appendChild(tr);
-
-      // Debug log to check row values
-      console.log("Appending row:", {
-        locationId: locationid || rowCounter,
-        userId: userid || userId,
-        timestamp: timestamp,
-        longitude: longitude,
-        latitude: latitude,
-        elevation: (altitude !== null && altitude !== undefined) ? altitude + " m" : "N/A"
-      });
-
-      // Update local counter if a DB id wasn't provided.
-      if (!locationid) {
-        rowCounter++;
-      }
-    }
-
-    // Retrieve stored data from Supabase and populate the table.
-    async function fetchStoredData() {
-      const { data, error } = await supabase
-        .from('locations')
-        .select('*')
-        .order('timestamp', { ascending: true });
-
-      if (error) {
-        console.error("Error retrieving data from Supabase:", error);
+      const timeElement = document.getElementById('currentTime');
+      if (timeElement) {
+        timeElement.textContent = now.toLocaleString();
       } else {
-        data.forEach(row => {
-          appendRow(row.latitude, row.longitude, row.elevation, row.timestamp, row.userid, row.locationid);
-        });
-        // Update rowCounter for new entries (assuming locationid is sequential)
-        rowCounter = data.length + 1;
+        console.error("❌ Element with ID 'currentTime' not found.");
       }
     }
 
-    // Store a new row in Supabase.
-    async function storeRowData(timestamp, userid, latitude, longitude, altitude) {
-      const { data, error } = await supabase
-        .from('locations')
-        .insert([
-          { userid: userid, timestamp: timestamp, latitude: latitude, longitude: longitude, elevation: altitude }
-        ]);
-      if (error) {
-        console.error("Error storing data to Supabase:", error);
-      } else {
-        console.log("Data stored in Supabase:", data);
-      }
-    }
-
-    // Add a new row using the device's location data and store it in Supabase.
-    function addRow() {
-      const now = new Date();
-      const timestamp = now.toLocaleString();
-
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          function(position) {
-            const latitude = position.coords.latitude.toFixed(4);
-            const longitude = position.coords.longitude.toFixed(4);
-            const altitude = (position.coords.altitude !== null) ? position.coords.altitude.toFixed(2) : null;
-            appendRow(latitude, longitude, altitude, timestamp, userId);
-            storeRowData(timestamp, userId, latitude, longitude, altitude);
-          },
-          function(error) {
-            console.error("Error obtaining location:", error);
-            appendRow("N/A", "N/A", "N/A", timestamp, userId);
-            storeRowData(timestamp, userId, "N/A", "N/A", "N/A");
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 5000,
-            maximumAge: 0
-          }
-        );
-      } else {
-        console.log("Geolocation is not supported by this browser.");
-        appendRow("N/A", "N/A", "N/A", timestamp, userId);
-        storeRowData(timestamp, userId, "N/A", "N/A", "N/A");
-      }
-    }
-
-    // Schedule adding a new row at the start of the next minute.
-    function scheduleRowAddition() {
-      const now = new Date();
-      const seconds = now.getSeconds();
-      const delay = (60 - seconds) * 1000;
-      setTimeout(function() {
-        addRow();
-        setInterval(addRow, 60000);
-      }, delay);
-    }
-
-    // On page load, fetch stored data and then schedule new rows.
+    // Run this after DOM is fully loaded
     document.addEventListener('DOMContentLoaded', function() {
-      fetchStoredData();
-      scheduleRowAddition();
+      console.log("✅ DOM Loaded");
+      updateCurrentTime();
+      setInterval(updateCurrentTime, 1000);
+      
+      // Register the service worker if available
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('service-worker.js')
+          .then(registration => {
+            console.log('Service Worker registered with scope:', registration.scope);
+          })
+          .catch(error => {
+            console.error('Service Worker registration failed:', error);
+          });
+      }
     });
   </script>
 </body>
