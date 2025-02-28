@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <title>HelloPWA</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Link to the manifest file -->
   <link rel="manifest" href="manifest.json">
-  <!-- Set a theme color -->
   <meta name="theme-color" content="#317EFB">
+  <!-- Supabase client library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
   <script>
     // Register the service worker if available
     if ('serviceWorker' in navigator) {
@@ -36,20 +36,31 @@
     }
     #currentTime {
       font-size: 2em;
-      margin: 20px 0;
+      margin: 10px 0;
+    }
+    #version {
+      font-size: 1em;
+      color: gray;
+      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
-  <!-- Dynamic current time header -->
+  <!-- Display current time above the version -->
   <h1 id="currentTime"></h1>
-  <p>This HelloPWA displays the current time and adds a new row at the start of each minute using the device's location data.</p>
+  <p id="version">Version 0.1</p> <!-- Version label below the time -->
 
-  <!-- Table with 5 columns: ID, Timestamp, Longitude, Latitude, Elevation -->
+  <p>
+    This HelloPWA displays the current time and a table of location data retrieved from and stored in Supabase.
+    New rows (with 6 columns) are added at the start of each minute using the device's location.
+  </p>
+
+  <!-- Table with 6 columns: Location ID, User ID, Timestamp, Longitude, Latitude, Elevation -->
   <table>
     <thead>
       <tr>
-        <th>ID</th>
+        <th>Location ID</th>
+        <th>User ID</th>
         <th>Timestamp</th>
         <th>Longitude</th>
         <th>Latitude</th>
@@ -57,92 +68,155 @@
       </tr>
     </thead>
     <tbody>
-      <!-- Dynamic rows will be inserted here -->
+      <!-- Rows will be dynamically inserted here -->
     </tbody>
   </table>
 
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // Function to update the header with the current time every second
-      function updateCurrentTime() {
-        const now = new Date();
-        document.getElementById('currentTime').textContent = now.toLocaleString();
-      }
-      updateCurrentTime();
-      setInterval(updateCurrentTime, 1000);
+    // Initialize Supabase client (replace with your actual credentials)
+    const supabaseUrl = 'https://bguwiprkgcxrqauztmvd.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJndXdpcHJrZ2N4cnFhdXp0bXZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA3ODAxOTksImV4cCI6MjA1NjM1NjE5OX0.ATbtMPiPt8VvtyVBu-gpmDo8Mo1eWy1aFXKfb6m1QsE';
+    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-      // Initialize row counter
-      let rowCounter = 1;
+    // Dummy user id; if using Supabase Auth, retrieve the authenticated user's id.
+    const userId = "anonymous";
 
-      // Function to append a new row to the table with the provided coordinates
-      function appendRow(latitude, longitude, altitude) {
-        const tbody = document.querySelector('table tbody');
-        const tr = document.createElement('tr');
-        const now = new Date();
+    // Local counter for new rows when no DB id is provided.
+    let rowCounter = 1;
 
-        const cellId = document.createElement('td');
-        cellId.textContent = rowCounter;
-        const cellTimestamp = document.createElement('td');
-        cellTimestamp.textContent = now.toLocaleString();
-        const cellLongitude = document.createElement('td');
-        cellLongitude.textContent = longitude;
-        const cellLatitude = document.createElement('td');
-        cellLatitude.textContent = latitude;
-        const cellElevation = document.createElement('td');
-        cellElevation.textContent = (altitude !== null && altitude !== undefined) ? altitude + " m" : "N/A";
+    // Update the current time every second.
+    function updateCurrentTime() {
+      const now = new Date();
+      document.getElementById('currentTime').textContent = now.toLocaleString();
+    }
+    updateCurrentTime();
+    setInterval(updateCurrentTime, 1000);
 
-        tr.appendChild(cellId);
-        tr.appendChild(cellTimestamp);
-        tr.appendChild(cellLongitude);
-        tr.appendChild(cellLatitude);
-        tr.appendChild(cellElevation);
-        tbody.appendChild(tr);
+    // Append a row to the table with six columns.
+    function appendRow(latitude, longitude, altitude, timestamp, userid, locationid) {
+      const tbody = document.querySelector('table tbody');
+      const tr = document.createElement('tr');
 
+      const cellLocationId = document.createElement('td');
+      cellLocationId.textContent = locationid || rowCounter;
+
+      const cellUserId = document.createElement('td');
+      cellUserId.textContent = userid || userId;
+
+      const cellTimestamp = document.createElement('td');
+      cellTimestamp.textContent = timestamp;
+
+      const cellLongitude = document.createElement('td');
+      cellLongitude.textContent = longitude;
+
+      const cellLatitude = document.createElement('td');
+      cellLatitude.textContent = latitude;
+
+      const cellElevation = document.createElement('td');
+      cellElevation.textContent = (altitude !== null && altitude !== undefined) ? altitude + " m" : "N/A";
+
+      tr.appendChild(cellLocationId);
+      tr.appendChild(cellUserId);
+      tr.appendChild(cellTimestamp);
+      tr.appendChild(cellLongitude);
+      tr.appendChild(cellLatitude);
+      tr.appendChild(cellElevation);
+      tbody.appendChild(tr);
+
+      // Debug log to check row values
+      console.log("Appending row:", {
+        locationId: locationid || rowCounter,
+        userId: userid || userId,
+        timestamp: timestamp,
+        longitude: longitude,
+        latitude: latitude,
+        elevation: (altitude !== null && altitude !== undefined) ? altitude + " m" : "N/A"
+      });
+
+      // Update local counter if a DB id wasn't provided.
+      if (!locationid) {
         rowCounter++;
       }
+    }
 
-      // Function to add a new row using the device's location data
-      function addRow() {
-        // If geolocation is available, use it
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            function(position) {
-              const latitude = position.coords.latitude.toFixed(4);
-              const longitude = position.coords.longitude.toFixed(4);
-              // altitude can be null if not available
-              const altitude = (position.coords.altitude !== null) ? position.coords.altitude.toFixed(2) : null;
-              appendRow(latitude, longitude, altitude);
-            },
-            function(error) {
-              console.error("Error obtaining location:", error);
-              // Fallback: if obtaining location fails, show N/A for all values
-              appendRow("N/A", "N/A", "N/A");
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 5000,
-              maximumAge: 0
-            }
-          );
-        } else {
-          console.log("Geolocation is not supported by this browser.");
-          appendRow("N/A", "N/A", "N/A");
-        }
+    // Retrieve stored data from Supabase and populate the table.
+    async function fetchStoredData() {
+      const { data, error } = await supabase
+        .from('locations')
+        .select('*')
+        .order('timestamp', { ascending: true });
+
+      if (error) {
+        console.error("Error retrieving data from Supabase:", error);
+      } else {
+        data.forEach(row => {
+          appendRow(row.latitude, row.longitude, row.elevation, row.timestamp, row.userid, row.locationid);
+        });
+        // Update rowCounter for new entries (assuming locationid is sequential)
+        rowCounter = data.length + 1;
       }
+    }
 
-      // Function to schedule row addition at the start of the next minute (when seconds === 0)
-      function scheduleRowAddition() {
-        const now = new Date();
-        const seconds = now.getSeconds();
-        // Calculate the delay until the start of the next minute
-        const delay = (60 - seconds) * 1000;
-        setTimeout(function() {
-          addRow();
-          // After the first row, add a new row every 60 seconds
-          setInterval(addRow, 60000);
-        }, delay);
+    // Store a new row in Supabase.
+    async function storeRowData(timestamp, userid, latitude, longitude, altitude) {
+      const { data, error } = await supabase
+        .from('locations')
+        .insert([
+          { userid: userid, timestamp: timestamp, latitude: latitude, longitude: longitude, elevation: altitude }
+        ]);
+      if (error) {
+        console.error("Error storing data to Supabase:", error);
+      } else {
+        console.log("Data stored in Supabase:", data);
       }
+    }
 
+    // Add a new row using the device's location data and store it in Supabase.
+    function addRow() {
+      const now = new Date();
+      const timestamp = now.toLocaleString();
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          function(position) {
+            const latitude = position.coords.latitude.toFixed(4);
+            const longitude = position.coords.longitude.toFixed(4);
+            const altitude = (position.coords.altitude !== null) ? position.coords.altitude.toFixed(2) : null;
+            appendRow(latitude, longitude, altitude, timestamp, userId);
+            storeRowData(timestamp, userId, latitude, longitude, altitude);
+          },
+          function(error) {
+            console.error("Error obtaining location:", error);
+            appendRow("N/A", "N/A", "N/A", timestamp, userId);
+            storeRowData(timestamp, userId, "N/A", "N/A", "N/A");
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+          }
+        );
+      } else {
+        console.log("Geolocation is not supported by this browser.");
+        appendRow("N/A", "N/A", "N/A", timestamp, userId);
+        storeRowData(timestamp, userId, "N/A", "N/A", "N/A");
+      }
+    }
+
+    // Schedule adding a new row at the start of the next minute.
+    function scheduleRowAddition() {
+      const now = new Date();
+      const seconds = now.getSeconds();
+      const delay = (60 - seconds) * 1000;
+      setTimeout(function() {
+        addRow();
+        setInterval(addRow, 60000);
+      }, delay);
+    }
+
+    // On page load, fetch stored data and then schedule new rows.
+    document.addEventListener('DOMContentLoaded', function() {
+      fetchStoredData();
       scheduleRowAddition();
     });
   </script>
