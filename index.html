@@ -20,9 +20,131 @@
         });
     }
   </script>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #f4f4f4;
+    }
+    #currentTime {
+      font-size: 2em;
+      margin: 20px 0;
+    }
+  </style>
 </head>
 <body>
-  <h1>Hello, World!</h1>
-  <p>This is a simple Hello World PWA.</p>
+  <!-- Dynamic current time header -->
+  <h1 id="currentTime"></h1>
+  <p>This HelloPWA displays the current time and adds a new row at the start of each minute using the device's location data.</p>
+
+  <!-- Table with 5 columns: ID, Timestamp, Longitude, Latitude, Elevation -->
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Timestamp</th>
+        <th>Longitude</th>
+        <th>Latitude</th>
+        <th>Elevation</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Dynamic rows will be inserted here -->
+    </tbody>
+  </table>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Function to update the header with the current time every second
+      function updateCurrentTime() {
+        const now = new Date();
+        document.getElementById('currentTime').textContent = now.toLocaleString();
+      }
+      updateCurrentTime();
+      setInterval(updateCurrentTime, 1000);
+
+      // Initialize row counter
+      let rowCounter = 1;
+
+      // Function to append a new row to the table with the provided coordinates
+      function appendRow(latitude, longitude, altitude) {
+        const tbody = document.querySelector('table tbody');
+        const tr = document.createElement('tr');
+        const now = new Date();
+
+        const cellId = document.createElement('td');
+        cellId.textContent = rowCounter;
+        const cellTimestamp = document.createElement('td');
+        cellTimestamp.textContent = now.toLocaleString();
+        const cellLongitude = document.createElement('td');
+        cellLongitude.textContent = longitude;
+        const cellLatitude = document.createElement('td');
+        cellLatitude.textContent = latitude;
+        const cellElevation = document.createElement('td');
+        cellElevation.textContent = (altitude !== null && altitude !== undefined) ? altitude + " m" : "N/A";
+
+        tr.appendChild(cellId);
+        tr.appendChild(cellTimestamp);
+        tr.appendChild(cellLongitude);
+        tr.appendChild(cellLatitude);
+        tr.appendChild(cellElevation);
+        tbody.appendChild(tr);
+
+        rowCounter++;
+      }
+
+      // Function to add a new row using the device's location data
+      function addRow() {
+        // If geolocation is available, use it
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            function(position) {
+              const latitude = position.coords.latitude.toFixed(4);
+              const longitude = position.coords.longitude.toFixed(4);
+              // altitude can be null if not available
+              const altitude = (position.coords.altitude !== null) ? position.coords.altitude.toFixed(2) : null;
+              appendRow(latitude, longitude, altitude);
+            },
+            function(error) {
+              console.error("Error obtaining location:", error);
+              // Fallback: if obtaining location fails, show N/A for all values
+              appendRow("N/A", "N/A", "N/A");
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 5000,
+              maximumAge: 0
+            }
+          );
+        } else {
+          console.log("Geolocation is not supported by this browser.");
+          appendRow("N/A", "N/A", "N/A");
+        }
+      }
+
+      // Function to schedule row addition at the start of the next minute (when seconds === 0)
+      function scheduleRowAddition() {
+        const now = new Date();
+        const seconds = now.getSeconds();
+        // Calculate the delay until the start of the next minute
+        const delay = (60 - seconds) * 1000;
+        setTimeout(function() {
+          addRow();
+          // After the first row, add a new row every 60 seconds
+          setInterval(addRow, 60000);
+        }, delay);
+      }
+
+      scheduleRowAddition();
+    });
+  </script>
 </body>
 </html>
