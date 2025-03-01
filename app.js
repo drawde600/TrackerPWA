@@ -1,4 +1,4 @@
-// app.js - v0.7
+// app.js - v0.8 - With background processing support
 
 // ✅ Check if Supabase is available in global scope
 if (typeof supabase === 'undefined') {
@@ -8,7 +8,7 @@ if (typeof supabase === 'undefined') {
   initializeApp();
 }
 
-  // Main application initialization
+// Main application initialization
 function initializeApp() {
   console.log("🚀 Initializing application...");
   
@@ -30,15 +30,201 @@ function initializeApp() {
     });
   }
   
-  // Use a valid UUID for the user ID since the column is UUID type
-  const userId = generateUUID();
-  console.log("Generated UUID for user:", userId);
+  // Get stored user ID or generate a new one if not found
+  let userId = localStorage.getItem('userId');
+  if (!userId) {
+    userId = generateUUID();
+    localStorage.setItem('userId', userId);
+  }
+  console.log("User ID:", userId);
   
   let rowCounter = 1; // Local counter for display
+  let wakeLock = null; // Store the wake lock reference
+  
+  // Register service worker and set up background sync
+  setupServiceWorker();
   
   // Fetch data and set up row addition
   fetchStoredData();
   scheduleRowAddition();
+  setupBackgroundProcessing();
+  
+  // ✅ Set up service worker and background sync
+  function setupServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(registration => {
+          console.log('✅ Service Worker registered with scope:', registration.scope);
+          
+          // Send userId to service worker
+          if (navigator.serviceWorker.controller) {
+            sendUserIdToServiceWorker();
+          } else {
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+              sendUserIdToServiceWorker();
+            });
+          }
+          
+          // Register for periodic sync if supported
+          if ('periodicSync' in registration) {
+            registerPeriodicSync(registration);
+          } else {
+            console.log('⚠️ Periodic Background Sync not supported');
+          }
+          
+          // Register for background sync
+          if ('sync' in registration) {
+            navigator.serviceWorker.ready.then(swRegistration => {
+              return swRegistration.sync.register('sync-locations');
+            }).catch(err => {
+              console.error('⚠️ Background Sync registration failed:', err);
+            });
+          } else {
+            console.log('⚠️ Background Sync not supported');
+          }
+        })
+        .catch(error => {
+          console.error('❌ Service Worker registration failed:', error);
+        });
+      
+      // Setup message handler for service worker communication
+      navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data.type === 'NEW_LOCATION_RECORDED') {
+          console.log('📍 New location recorded in background:', event.data.location);
+          appendRow(
+            event.data.location.latitude.toFixed(4),
+            event.data.location.longitude.toFixed(4),
+            event.data.location.elevation ? event.data.location.elevation.toFixed(2) : null,
+            new Date(event.data.location.timestamp).toLocaleString(),
+            event.data.location.userid
+          );
+        }
+      });
+    } else {
+      console.error('❌ Service Workers not supported in this browser');
+    }
+  }
+  
+  // Send user ID to service worker
+  function sendUserIdToServiceWorker() {
+    if (!navigator.serviceWorker.controller) return;
+    
+    const messageChannel = new MessageChannel();
+    messageChannel.port1.onmessage = event => {
+      if (event.data.success) {
+        console.log('✅ User ID successfully sent to Service Worker');
+      }
+    };
+    
+    navigator.serviceWorker.controller.postMessage({
+      type: 'STORE_USER_ID',
+      userId: userId
+    }, [messageChannel.port2]);
+  }
+  
+  // Register for periodic background sync
+  async function registerPeriodicSync(registration) {
+    try {
+      if ('periodicSync' in registration) {
+        // Check permission
+        const status = await navigator.permissions.query({
+          name: 'periodic-background-sync',
+        });
+        
+        if (status.state === 'granted') {
+          // Register for periodic sync every 15 minutes (minimum allowed)
+          await registration.periodicSync.register('location-update', {
+            minInterval: 15 * 60 * 1000, // 15 minutes in milliseconds
+          });
+          console.log('✅ Periodic Background Sync registered');
+        } else {
+          console.log('⚠️ Periodic Background Sync permission not granted');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error registering Periodic Background Sync:', error);
+    }
+  }
+  
+  // Setup background processing and wake locks
+  async function setupBackgroundProcessing() {
+    // If wake lock is available, try to use it
+    if ('wakeLock' in navigator) {
+      try {
+        // Request a screen wake lock
+        wakeLock = await navigator.wakeLock.request('screen');
+        console.log('✅ Wake Lock acquired');
+        
+        wakeLock.addEventListener('release', () => {
+          console.log('💤 Wake Lock released');
+        });
+      } catch (err) {
+        console.error('❌ Error acquiring Wake Lock:', err);
+      }
+    } else {
+      console.log('⚠️ Wake Lock API not supported in this browser');
+    }
+    
+    // Add event listeners for page visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Add event listener for online/offline status
+    window.addEventListener('online', () => {
+      console.log('🌐 App is online');
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then(registration => {
+          registration.sync.register('sync-locations');
+        });
+      }
+    });
+    
+    window.addEventListener('offline', () => {
+      console.log('📴 App is offline');
+    });
+  }
+  
+  // Handle page visibility changes
+  async function handleVisibilityChange() {
+    if (document.visibilityState === 'hidden') {
+      console.log('📱 Page is now hidden');
+      
+      // If the wake lock is active, release it to save battery
+      if (wakeLock) {
+        await wakeLock.release();
+        wakeLock = null;
+      }
+      
+      // Force a location record before going to background
+      if (navigator.serviceWorker.controller) {
+        const messageChannel = new MessageChannel();
+        navigator.serviceWorker.controller.postMessage({
+          type: 'RECORD_LOCATION_NOW'
+        }, [messageChannel.port2]);
+      }
+      
+      // Register background sync
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(registration => {
+          registration.sync.register('sync-locations');
+        });
+      }
+    } else if (document.visibilityState === 'visible') {
+      console.log('📱 Page is now visible');
+      
+      // Re-acquire the wake lock
+      if (!wakeLock && 'wakeLock' in navigator) {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log('✅ Wake Lock re-acquired');
+        } catch (err) {
+          console.error('❌ Error re-acquiring Wake Lock:', err);
+        }
+      }
+      
+      // Refresh the data
+      fetchStoredData();
+    }
+  }
   
   // ✅ Retrieve stored data from Supabase and populate the table
   async function fetchStoredData() {
@@ -54,6 +240,10 @@ function initializeApp() {
       }
       
       console.log(`✅ Retrieved ${data.length} records from database`);
+      
+      // Clear existing rows
+      const tbody = document.querySelector('table tbody');
+      tbody.innerHTML = '';
       
       data.forEach(row => {
         appendRow(row.latitude, row.longitude, row.elevation, row.timestamp, row.userid, row.locationid);
@@ -134,10 +324,6 @@ function initializeApp() {
       }
       
       console.log("✅ Data stored in Supabase successfully");
-      
-      // Optionally refresh the displayed data after insertion
-      // fetchStoredData();
-      
     } catch (error) {
       console.error("❌ Error storing data to Supabase:", error.message);
       // If there's a more detailed error object, log it
@@ -147,6 +333,27 @@ function initializeApp() {
           hint: error.hint,
           code: error.code
         });
+      }
+      
+      // If online but failed to store, it might be a temporary error
+      // Try to queue for background sync
+      if (navigator.onLine && 'serviceWorker' in navigator) {
+        const locationData = {
+          timestamp: timestamp,
+          userid: userid,
+          latitude: latitude,
+          longitude: longitude,
+          elevation: altitude
+        };
+        
+        // Send to service worker for storage
+        if (navigator.serviceWorker.controller) {
+          const messageChannel = new MessageChannel();
+          navigator.serviceWorker.controller.postMessage({
+            type: 'STORE_LOCATION',
+            location: locationData
+          }, [messageChannel.port2]);
+        }
       }
     }
   }

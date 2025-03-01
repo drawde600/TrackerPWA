@@ -1,7 +1,7 @@
 {
-  "name": "HelloPWA",
-  "short_name": "PWA",
-  "start_url": "/",
+  "name": "GPS Location Tracker",
+  "short_name": "LocationTracker",
+  "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#317EFB",
@@ -16,5 +16,13 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "permissions": [
+    "geolocation",
+    "background-sync"
+  ],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  }
 }
