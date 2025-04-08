@@ -224,9 +224,9 @@ async function syncLocations() {
 async function getSupabaseClientInfo() {
   const clients = await self.clients.matchAll();
   if (clients.length === 0) {
-    return {
-      supabaseUrl: 'https://bguwiprkgcxrqauztmvd.supabase.co',
-      supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJndXdpcHJrZ2N4cnFhdXp0bXZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA3ODAxOTksImV4cCI6MjA1NjM1NjE5OX0.ATbtMPiPt8VvtyVBu-gpmDo8Mo1eWy1aFXKfb6m1QsE'
+    return {      
+      supabaseUrl: 'https://orvxjadhjvjdtjmmhduv.supabase.co',
+      supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ydnhqYWRoanZqZHRqbW1oZHV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE0OTIwNTksImV4cCI6MjA1NzA2ODA1OX0.Yz7ls6AJQS5rZMfY3N5_Fh7ElDMY6qbwJ9r_Z_0Mh4g'
     };
   }
   
